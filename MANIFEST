@@ -1,0 +1,10 @@
+lib/Dyer/Autosort.pm
+lib/Dyer/Autosort/File.pm
+MANIFEST
+Makefile.PL
+bin/autosort
+etc/autosort.conf
+t/basic.t
+t/2_dyer_autosort_file.t
+t/0setup.t
+META.yml                                 Module meta-data (added by MakeMaker)

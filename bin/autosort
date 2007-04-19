@@ -1,0 +1,110 @@
+#!/usr/bin/perl -w
+use strict;
+use warnings;
+use lib './lib';
+use Dyer::Autosort;
+use Getopt::Std;
+our $VERSION = sprintf "%d.%02d", q$Revision: 1.3 $ =~ /(\d+)/g;
+
+my $verbose = 1;
+sub verbose : lvalue { $verbose }
+
+my $o = {};
+getopts('qfdsphvu',$o);
+
+verbose 0 if $o->{q};
+
+if ($o->{d}){
+	print STDERR "debug on.\n";
+	Dyer::Autosort::DEBUG = 1;
+}
+
+print $VERSION and exit if $o->{v};
+
+scalar @ARGV or help();
+help() if $o->{h};
+
+
+#print STDERR "autosort started ".`date` if verbose;
+
+
+for (@ARGV){
+	my $abs = $_;
+		
+	
+	my $a = new Dyer::Autosort({ abs_client => $abs })
+		or print STDERR "ERROR: client [$abs] does not have incoming directory.\n" and next;
+	
+
+	if ($o->{u}){
+		print STDERR "unsorting $abs..\n" if verbose;
+		my $a = new Dyer::Autosort({ abs_client => $abs });
+		$a->unsort;
+		print STDERR "unsorting $abs done.\n" if verbose;
+		
+	}
+
+	elsif ($o->{s}){
+		print STDERR "sorting $abs.. \n" if verbose;
+
+		$a->sort;
+
+		print STDERR "sorting $abs done.\n" if verbose;
+	
+	}
+
+	elsif ($o->{p}){
+		print $a->unsorted_count;		
+	}
+	
+	else {
+		help();
+	}
+}	
+
+
+
+
+
+
+sub help {
+	print STDERR `man autosort`;
+	exit;
+}
+
+
+
+__END__
+
+=pod
+
+=head1 NAME
+
+autosort - sort and unsort files into a filesystem hierarchy
+
+=head1 USAGE
+
+The main argument provided is a path to a base of a hierarchy you want to sort
+
+	-u unsort client
+	-f force
+	-s autosort client
+	-h help
+	-v version
+	-p pending, how many unsorted files in incoming dir
+	-q quiet
+	-d debug (lots of messages from modules)
+
+To unsort a client
+
+	autosort -u /path/to/client
+
+To sort a client's files in incoming
+
+	autosort -a /path/to/client
+
+=head1 AUTHOR
+
+Leo Charre leocharre at cpan dot org
+
+=cut
