@@ -3,7 +3,7 @@ use Dyer::Autosort::File;
 use strict;
 use Carp;
 use warnings;
-our $VERSION = sprintf "%d.%02d", q$Revision: 1.3 $ =~ /(\d+)/g;
+our $VERSION = sprintf "%d.%02d", q$Revision: 1.4 $ =~ /(\d+)/g;
 
 my $DEBUG = 0;
 sub DEBUG : lvalue { $DEBUG }
@@ -22,12 +22,92 @@ Dyer::Autosort - sort and unsort client files to and from incoming
 		abs_client => '/srv/doc/Clients/Joe Montenegro',
 	});
 
-=head1 new()
+=head1 DESCRIPTION
 
-argument is absolute path to client directory
-croaks if directory does not exist
+Imagine you have a lot of files in a server. Various people edit these files, create directories for them,
+and organize them as they see fit. For example, users organize files by 'year', 'author', etc- and they
+want to actually have the file system hierarchy as 1975/bubba/file.txt
 
-	my $client = new DyerAutosortClient({
+If you name your files descriptively, autosort allows you to create a file hierarchy by filename.
+
+A master configuration file defines rules, for example if we have 'recipies' files, which we will order
+by meal eaten with, and the date it was entered.
+Then we name our recipe files:
+
+	021289-Super Marvelous Food-@DI.txt
+	021290-Another Super Food-@BR.txt
+
+Maybe we want to organize our recipies by authors. So we have:
+
+	/storage/joe
+
+We make an incoming directory for joe:
+
+	/storage/joe/incoming
+
+We place the files there:
+
+	/storage/joe/incoming/021289-Super Marvelous Food-@DI.txt
+	/storage/joe/incoming/021290-Another Super Food-@BR.txt
+
+We add to the YAML configuration file :
+
+	---
+	types:
+	 '@DI':
+	   rel_destination: 'Recipies/Dinner/{yyyy}/{filename}'
+	   required:
+		 - code
+		 - ext
+		 - filename
+		 - yyyy
+	 '@BR':
+	   rel_destination: 'Recipies/Breakfast/{yyyy}/{filename}'
+		required:
+		 - code
+		 - ext
+		 - filename
+		 - yyyy
+
+Then we use autosort script (included in dist) to automatically create the hierarchy:
+
+	autosort -s /storage/joe
+
+What if we change the rules in the configuration file? Then unsort and resort the hierarchy:
+
+	autosort -u /storage/joe
+	autosort -s /storage/joe
+
+
+=head2 MOTIVATION
+
+This whole thing was asked for at work to organize massive ammounts of documents.
+At first I thought it was kind of nuts. Why not just place metadata to the files and sort them, 
+find them etc.. via that? Using the filesystem as a database seemed crazy.
+But the concern was partly that there were so many files, and they were used to the old way of 
+working. 
+
+This application basically lets users do things like scan in (and name) a million documents for a thousand
+clients or users, and very quickly, the stuff goes to where they know it will be found. They can
+use the filesystem to find the files.
+
+If any rules change, or another kind of file is added, the change can be implemented quickly.
+
+=head1 METHODS
+
+The Dyer::Autosort package is the abstraction for one 'client' or 'account'. One directory structure in which 
+we organize files into a tree, according to filename.
+
+(Invidual file methods are in Dyer::Autosort::File)
+
+=head2 new()
+
+argument is hash ref
+main argument is absolute path to client directory
+returns undef if: directory does not exist
+returns undef if: directory does not have an 'incoming' directory within it.
+
+	my $client = new Dyer::Autosort({
 		abs_client => '/srv/doc/Clients/Joe Montenegro',
 	});
 
@@ -49,9 +129,6 @@ sub new {
 		print STDERR "DEBUG Dyer::Autosort is on\n";
 		Dyer::Autosort::File::DEBUG = 1;
 	}
-
-
-
 	
 	return $self;
 }
@@ -92,9 +169,11 @@ sub has_incoming {
 	-d $self->abs_client.'/'.$self->rel_incoming or return 0;
 	return 1;
 }
-=head1 has_incoming()
+
+=head2 has_incoming()
 
 returns boolean, if client has incoming directory present
+will likely deprecate
 
 =cut
 
@@ -103,7 +182,8 @@ sub rel_incoming {
 	$self->{rel_incoming} ||='incoming';
 	return $self->{rel_incoming};
 }
-=head1 rel_incoming()
+
+=head2 rel_incoming()
 
 returns relative path to incoming dir- relative to abs_client path
 
@@ -113,7 +193,8 @@ sub abs_incoming {
 	my $self = shift;
 	return $self->abs_client .'/'. $self->rel_incoming;
 }
-=head1 abs_incoming()
+
+=head2 abs_incoming()
 
 returns path to client incoming directory, where incoming files reside
 
@@ -123,7 +204,8 @@ sub abs_client {
 	my $self= shift;
 	return $self->{abs_client};
 }
-=head1 abs_client()
+
+=head2 abs_client()
 
 returns abs_path to client dir
 
@@ -154,7 +236,8 @@ sub client_name {
 	my $name=$1;
 	return $name;
 }
-=head1 client_name()
+
+=head2 client_name()
 
 returns client name, just the name
 
@@ -190,7 +273,9 @@ sub _remove_empty_dirs {
 	return 1;
 }
 
-=head1 _remove_empty_dirs()
+=head2 _remove_empty_dirs()
+
+called internally, removes empty dirs after an unsort operation.
 
 =cut
 
@@ -264,9 +349,36 @@ sub unsort {
 unsorts all files for this client.
 will remove all empty directories
 
+	$a->unsort;
+
 =cut
 
+=head1 autosort.conf
 
+by default the conf file is /etc/autosort.conf
+
+a sample file is included.
+
+
+=head1 CAVEATS
+
+this is made to run as root pretty much, but it doesnt have to. you will have to tell the autosort script
+and instances of this module that the conf file is elsewhere.
+
+
+Please note, this software- altough in use, is still under development and needs more documentation.
+
+At this point, if you can make use of this system, I suggest you shoot an email to the AUTHOR for assitance.
+
+=head1 DEBUGGING
+
+	Dyer::Autosort::DEBUG = 1;
+
+Will set debug flags for both Dyer::Autosort and Dyer::Autosort::File
+
+=head1 BUGS
+
+Please email AUTHOR
 
 =head1 AUTHOR
 
@@ -276,8 +388,8 @@ Leo Charre leocharre at cpan dot org
 
 =head1 SEE ALSO
 
-Dyer::Autosort::File
-DMS
+L<Dyer::Autosort::File>
+autosort
 
 =cut
 
