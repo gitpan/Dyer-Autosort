@@ -1,15 +1,14 @@
 package Dyer::Autosort::File;
 use strict;
 use warnings;
+use base 'File::PathInfo::Ext';
 use File::Path;
-use File::Copy;
 use YAML;
 use Carp;
-our $VERSION = sprintf "%d.%02d", q$Revision: 1.5 $ =~ /(\d+)/g;
-use Smart::Comments '###';
+our $VERSION = sprintf "%d.%02d", q$Revision: 1.8 $ =~ /(\d+)/g;
 
-my $DEBUG = 0;
-sub DEBUG : lvalue { $DEBUG }
+$Dyer::Autosort::File::DEBUG = 0;
+sub DEBUG : lvalue { $Dyer::Autosort::File::DEBUG }
 
 
 =pod
@@ -20,59 +19,23 @@ Dyer::Autosort::File
 
 =cut
 
-=for nothing
-use vars qw{@ISA @EXPORT_OK %EXPORT_TAGS};
-require Exporter;
-@ISA = qw(Exporter); 
-@EXPORT_OK = qw(fields_hash);
-%EXPORT_TAGS = ( all => \@EXPORT_OK );
-=cut
-
-sub new {	
-	my ($class, $self) = (shift, shift);
-	$self ||= {};
-	$self->{abs_client} || croak('missing arg to constructor: abs_client'); # path to /clients/joe
-	$self->{rel_path} or croak('missing arg to constructor: rel_path'); 
-	$self->{abs_types_conf} ||= '/etc/autosort.conf'; #or croak('missing arg to constructor: abs_types_conf');
-	bless $self, $class; 
-	$self->_set_file;	
-
-
-	print STDERR "DEBUG Dyer::Autosort::File is on\n" if DEBUG;
-	
-	return $self;
-}
-
 =head1 new()
 
-	my $f = new Dyer::Autosort::File({
-		abs_client => '/path/to/filesystem/tree/slice',
-		abs_types_conf => '/etc/autosort.conf',
-		rel_path => 'incoming/sortme.pdf',
-	});
+	$ENV_DOCUMENT_ROOT = '/abspath/toclient';	
+
+	my $f = new Dyer::Autosort::File('/abspath/toclient/filetosort-@WHATEVER.pdf');
 
 =cut
 
-sub _set_file {
-	my $self = shift;
-	-f $self->abs_path or croak("file ".$self->abs_path." does not exist");
-	return 1;
-}
 
-sub abs_path {
-	my $self = shift;
-	return $self->abs_client . '/'.$self->rel_path;
-}
+
 
 sub abs_client {
 	my $self= shift;
-	return $self->{abs_client};
+	$self->DOCUMENT_ROOT or croak(__PACKAGE__." missing DOCUMENT_ROOT, abs_client arg to constructor");
+	return $self->DOCUMENT_ROOT;
 }
 
-sub rel_path {
-	my $self = shift;
-	return $self->{rel_path};
-}
 
 sub rel_destination {
 	my $self = shift;
@@ -80,17 +43,19 @@ sub rel_destination {
 	unless ( defined $self->{rel_destination} ){
 
 		unless( $self->type_requirements_met ){
-			carp(" cannot return rel_destination(), type requirements are not met for [".$self->abs_path."]");
+			carp(" cannot return rel_destination(), type requirements are not met for [".
+				$self->abs_path."]");
 			return;
 		}
 
 		my $destination_formula = $self->_type->{rel_destination};
-		$destination_formula or warn("missing destination formula in conf type for type".$self->code."\n") and return;
+		$destination_formula or warn("missing destination formula in conf type for type".
+			$self->code."\n") and return;
 		
 	
 		while ($destination_formula=~m/\{([^\{\}]+)\}/ ){
-			my $field = $1; 
-			my $replacement = $self->_data->{$field};
+			my $field = $1;
+			my $replacement = $self->_fhdata->{$field};
 			$field or die("field not set");
 			$replacement or die("replacement for $field missing");
 
@@ -143,105 +108,136 @@ sub sort {
 		print STDERR " no code.\n" if DEBUG;
 		return;
 	}
+	print STDERR " code found ".$self->code."\n" if DEBUG;
 	
 	unless($self->type_requirements_met){
 		print STDERR " requirements not met\n" if DEBUG;
 		return;
 	}
 
+	print STDERR " type requirements met\n" if DEBUG;
+
 	unless( $self->abs_destination ){
 		print STDERR " cant get abs destination\n" if DEBUG;
 		return;
 	}
+
+	print STDERR " abs_destination gotten\n" if DEBUG;
 	
 	unless( $self->_assure_destination_loc ){
 		print STDERR " cant assure destination location\n" if DEBUG;
 		return;
 	}	
 	
-# TODO may seriously need to use File::PathInfo::Ext for this
-	File::Copy::move($self->abs_path, $self->abs_destination) 
-		or carp('cant move from:'.$self->abs_path ."\n to:".$self->abs_destination) and return;
+	print STDERR " abs_destination_loc assured\n" if DEBUG;
+	
+# TODO may seriously need to use File::PathInfo::Ext for this, otherwise metadata is lost.
+
+
+	
+	$self->move($self->abs_destination)
+		or carp(__PACKAGE__.'::sort() cant move from:'.$self->abs_path ."\n to:".$self->abs_destination) and return;
+
+	print STDERR " file moved/sorted.\n" if DEBUG;
+
+
+
+#	File::Copy::move($self->abs_path, $self->abs_destination) 
+#		or carp('cant move from:'.$self->abs_path ."\n to:".$self->abs_destination) and return;
 	
 	return 1;	
 }
 
 
+sub unsort {
+	my $self = shift;
+	print STDERR "unsort called for ".$self->abs_path ."\n" if DEBUG;
+
+	unless( $self->code ){
+		print STDERR " no code, will not unsort.\n" if DEBUG;
+		return;
+	}
+	
+	if ( $self->move( $self->DOCUMENT_ROOT.'/incoming/'.$self->filename)   ){
+		print STDERR __PACKAGE__."::unsort moved to ".$self->abs_path."\n";
+		return 1;
+	}
+	else {
+		carp(__PACKAGE__.'::sort() cant move from:'.$self->abs_path ."\n to:".$self->abs_destination) and return;
+	}	
+
+#	File::Copy::move($self->abs_path, $self->abs_destination) 
+#		or carp('cant move from:'.$self->abs_path ."\n to:".$self->abs_destination) and return;
+	
+	return 1;	
+
+}
 
 
+=head2 sort()
 
+=head2 unsort()
 
-
-
-
+=cut
 
 
 ## from DyerAutosort.pm
 
-sub filename {
-	my $self = shift;	
-	return $self->_data->{filename};	
-}
-
-sub ext {
-	my $self = shift;	
-	return $self->_data->{ext};	
-}
 
 sub code {
 	my $self = shift;	
-	return $self->_data->{code};
+	return $self->_fhdata->{code};
 }
 
 sub filename_fixed {
 	my $self = shift;	
-	return $self->_data->{filename_fixed};
+	return $self->_fhdata->{filename_fixed};
 }
 
 sub dd {
 	my $self = shift;	
-	return $self->_data->{dd};
+	return $self->_fhdata->{dd};
 }
 
 sub yy {
 	my $self = shift;	
-	return $self->_data->{yy};
+	return $self->_fhdata->{yy};
 }
 
 sub yyyy {
 	my $self = shift;	
-	return $self->_data->{yyyy};
+	return $self->_fhdata->{yyyy};
 }
 
 sub mm {
 	my $self = shift;	
-	return $self->_data->{mm};
+	return $self->_fhdata->{mm};
 }
 sub MM {
 	my $self = shift;	
-	return $self->_data->{MM};
+	return $self->_fhdata->{MM};
 }
 
 
 sub vendor_name {
 	my $self = shift;	
-	return $self->_data->{vendor_name};
+	return $self->_fhdata->{vendor_name};
 }
 
 sub checknum {
 	my $self = shift;	
-	return $self->_data->{checknum};
+	return $self->_fhdata->{checknum};
 }
 
 sub date_found {
 	my $self = shift;	
-	return $self->_data->{date_found_flag};
+	return $self->_fhdata->{date_found_flag};
 }
 
-sub _data {
+sub _fhdata {
 	my $self = shift;
-	$self->{_data} ||= fields_hash($self->abs_path);
-	return $self->{_data};
+	$self->{_fhdata} ||= fields_hash($self->abs_path);
+	return $self->{_fhdata};
 }
 
 ##
@@ -249,11 +245,12 @@ sub _data {
 
 sub conf {
 	my $self = shift;
+	$self->{abs_types_conf} ||= '/etc/autosort.conf';
+	
 	unless( $self->{conf} ){
 		$self->{conf} = YAML::LoadFile($self->{abs_types_conf}) 
 			or croak("cant read ".$self->{abs_types_conf});
 	}
-
 	return $self->{conf};
 }
 
@@ -292,12 +289,12 @@ sub type_requirements_met {
 	for ( @{$self->type_requires} ){
 		print STDERR " -requirement: $_.. " if DEBUG;
 		
-		if (defined $self->_data->{$_}){
+		if (defined $self->_fhdata->{$_}){
 		
 			print STDERR "defined.. " if DEBUG;
 
-			if( $self->_data->{$_} and $self->_data->{$_}=~/\w/){
-				print STDERR 'value: '.$self->_data->{$_}."\n" if DEBUG;
+			if( $self->_fhdata->{$_} and $self->_fhdata->{$_}=~/\w/){
+				print STDERR 'value: '.$self->_fhdata->{$_}."\n" if DEBUG;
 				next;
 			}
 		}
@@ -457,6 +454,13 @@ sub fields_hash {
 	#print STDERR "fixed $f{filename} -> $f{filename_fixed}\n";
 	}
 	#print STDERR "mm $f{mm} - dd $f{dd} - yy $f{yy} - yyyy $f{yyyy} \n\n";
+
+	if (DEBUG){
+		print STDERR "fields_hash() called..\n";
+		### %f
+	}
+
+	
 	return \%f;
 }
 

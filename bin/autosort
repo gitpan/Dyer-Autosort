@@ -3,8 +3,11 @@ use strict;
 use warnings;
 use lib './lib';
 use Dyer::Autosort;
+Dyer::Autosort::DEBUG = 0;
+Dyer::Autosort::File::DEBUG =0;
+use Cwd;
 use Getopt::Std;
-our $VERSION = sprintf "%d.%02d", q$Revision: 1.3 $ =~ /(\d+)/g;
+our $VERSION = sprintf "%d.%02d", q$Revision: 1.5 $ =~ /(\d+)/g;
 
 my $verbose = 1;
 sub verbose : lvalue { $verbose }
@@ -29,7 +32,9 @@ help() if $o->{h};
 
 
 for (@ARGV){
-	my $abs = $_;
+	my $abs = Cwd::abs_path($_);
+
+	
 		
 	
 	my $a = new Dyer::Autosort({ abs_client => $abs })

@@ -6,7 +6,7 @@ use lib './lib';
 use Dyer::Autosort;
 use Smart::Comments '###';
 
-Dyer::Autosort::DEBUG = 0;
+$Dyer::Autosort::DEBUG = 0;
 
 my $abs_client = cwd()."/t/Testing_Client";
 
@@ -19,12 +19,41 @@ my $a = new Dyer::Autosort({
 	
 ok($a, 'instanced');
 
+mkdir "$abs_client/emptydir";
+mkdir "$abs_client/emptydir2";
+
+ok( -d  "$abs_client/emptydir", "empty dir exists");
+
+my $empties;
+ok( $empties = $a->_emptydirfinder, 'empty dir finder');
+ 
+
+### $empties
+
+ok( scalar @$empties,'found empty dirs' );
+
+#ok(!( -d "$abs_client/emptydir" ), 'empty dir gone');
+
+
+
+
+
+
 
 my $abs_incoming= $a->abs_incoming;
 ok($abs_incoming,'abs_incoming()');
 ### $abs_incoming
 
+
+
+
 ok($a->unsort, 'unsort() 1');
+
+
+
+
+
+
 	
 ok($a->unsorted_count,'unsorted_count()');
 	

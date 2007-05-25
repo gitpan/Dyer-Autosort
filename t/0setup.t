@@ -44,12 +44,16 @@ my @tmps = (
 "t/Testing_Client/incoming/ROCKVILLE 1 091005.pdf",
 "t/Testing_Client/incoming/Rockville 1 101005 final-\@REC.pdf"
 );
+mkdir "$cwd/t/Testing_Client";
 
 mkdir "$cwd/t/Testing_Client/incoming";
 
 for (@tmps){
-	`touch '$cwd/$_'`;
-	ok(-f $_);
+	my $abs = "$cwd/$_";
+	open(FILE,">$abs");
+	print FILE "bogus";
+	close FILE;
+	ok(-f $abs);
 }
 
 

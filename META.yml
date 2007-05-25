@@ -1,10 +1,18 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         Dyer-Autosort
-version:      1.04
+version:      1.07
 version_from: lib/Dyer/Autosort.pm
 installdirs:  site
 requires:
+    Carp:                          0
+    File::Copy:                    0
+    File::Find::Rule:              0
+    File::Path:                    0
+    File::PathInfo::Ext:           1.13
+    IO::Dir:                       0
+    Smart::Comments:               0
+    YAML:                          0
 
 distribution_type: module
 generated_by: ExtUtils::MakeMaker version 6.30

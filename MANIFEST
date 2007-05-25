@@ -4,7 +4,8 @@ MANIFEST
 Makefile.PL
 bin/autosort
 etc/autosort.conf
-t/basic.t
+t/1.t
 t/2_dyer_autosort_file.t
 t/0setup.t
+t/9_cleanup.t
 META.yml                                 Module meta-data (added by MakeMaker)

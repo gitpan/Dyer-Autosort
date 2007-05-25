@@ -3,10 +3,16 @@ use lib './lib';
 use Dyer::Autosort::File;
 use Dyer::Autosort;
 use Cwd;
-use Smart::Comments '###';
+#use Smart::Comments '###';
 use strict;
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 my $a = new Dyer::Autosort({ abs_client => cwd().'/t/Testing_Client' });
+
+
+$ENV{DOCUMENT_ROOT} = $a->abs_client;
+
+
+
 
 
 ok( my $incoming = $a->ls_incoming);
@@ -15,7 +21,9 @@ ok( my $incoming = $a->ls_incoming);
 
 
 for ( grep { !/BOGUS/ } @$incoming){
-	my $f = new Dyer::Autosort::File({ abs_client => $a->abs_client, rel_path => "incoming/$_" });
+
+
+	my $f = new Dyer::Autosort::File($a->abs_client ."/incoming/$_");
 	ok($f, "instanced file for $_");
 
 
@@ -25,7 +33,7 @@ for ( grep { !/BOGUS/ } @$incoming){
 		
 		ok( my $requires = $f->type_requires );
 
-		my $data = $f->_data;
+		my $data = $f->_fhdata;
 		## $data
 
 		## $requires
@@ -39,25 +47,49 @@ for ( grep { !/BOGUS/ } @$incoming){
 			print STDERR " yy ". $f->yy.", ";
 			print STDERR " ext ". $f->ext.", ";
 			print STDERR " filename ". $f->filename."\n";
-
-			
 			
 		}	
 		
 		
 		ok( $f->type_requirements_met,'type reqs met yes');
 		
-	
+		$f->set_meta({ stay => 'yes' });		
+		ok($f->get_meta->{stay} eq 'yes','sat meta ok');
+		print STDERR "abs: ".$f->abs_path."\n";
+		
+		ok($f->sort,'sort') or die('cant sort 60');
+
+		
+		ok($f->get_meta->{stay} eq 'yes','sat meta ok');
+		print STDERR "abs: ".$f->abs_path."\n";
+
+
+		
+		ok($f->unsort,'unsort');
+		
+		ok($f->get_meta->{stay} eq 'yes','sat meta ok');
+		print STDERR "abs: ".$f->abs_path."\n";
+		
 	}
 	
 
 }
 
 
+
+
+
+
+
+
+
+
+
 # we know these are wrong..
 for ( grep { /BOGUS/ } @$incoming){
-	my $f = new Dyer::Autosort::File({ abs_client => $a->abs_client, rel_path => "incoming/$_" });
 
+
+	my $f = new Dyer::Autosort::File( $a->abs_client. "/incoming/$_" ) or die("cant instance Dyer::Autosort::File for ".$a->abs_client. "/incoming/$_");
 
 	ok( !$f->type_requirements_met);
 }

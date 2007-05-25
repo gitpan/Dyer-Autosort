@@ -1,14 +1,15 @@
 package Dyer::Autosort;
 use Dyer::Autosort::File;
 use strict;
+use IO::Dir;
 use Carp;
 use warnings;
-our $VERSION = sprintf "%d.%02d", q$Revision: 1.4 $ =~ /(\d+)/g;
-
-my $DEBUG = 0;
-sub DEBUG : lvalue { $DEBUG }
-
-
+use File::Find::Rule;
+use File::Copy;
+our $VERSION = sprintf "%d.%02d", q$Revision: 1.7 $ =~ /(\d+)/g;
+$Dyer::Autosort::DEBUG = 0;
+sub DEBUG : lvalue { $Dyer::Autosort::DEBUG }
+#use Smart::Comments '###';
 
 =pod
 
@@ -18,8 +19,9 @@ Dyer::Autosort - sort and unsort client files to and from incoming
 
 =head1 SYNOPSIS
 
-	my $client = new DyerAutosortClient({
+	my $client = new Dyer::Autosort({
 		abs_client => '/srv/doc/Clients/Joe Montenegro',
+		abs_types_conf => '/etc/autosort.conf',
 	});
 
 =head1 DESCRIPTION
@@ -109,7 +111,10 @@ returns undef if: directory does not have an 'incoming' directory within it.
 
 	my $client = new Dyer::Autosort({
 		abs_client => '/srv/doc/Clients/Joe Montenegro',
+		abs_types_conf => '/etc/autosort.conf',
 	});
+
+See also:  L<autosort.conf>
 
 =cut
 
@@ -117,25 +122,19 @@ sub new {
 	my ($class, $self) = (shift, shift);
 	$self ||= {};
 	$self->{abs_client} || croak('missing arg to constructor: abs_client'); # path to /clients/joe
-#	$self->{rel_incoming} ||= 'incoming';
 	$self->{abs_types_conf} ||= '/etc/autosort.conf';
 	
 	bless $self, $class; 
 
 	$self->_set_client or return;
-
 	
 	if( DEBUG ) {
 		print STDERR "DEBUG Dyer::Autosort is on\n";
-		Dyer::Autosort::File::DEBUG = 1;
+		$Dyer::Autosort::File::DEBUG = 1;
 	}
 	
 	return $self;
 }
-
-
-
-
 
 sub ls_incoming {
 	my $self= shift;
@@ -202,6 +201,12 @@ returns path to client incoming directory, where incoming files reside
 
 sub abs_client {
 	my $self= shift;
+
+	$self->{abs_client} or croak('missing abs_client argument to Autosort object constructor.');
+	
+	unless( -d '/'.$self->{abs_client} ){
+		croak("abs client argument /".$self->{abs_client}." is not a dir");	
+	}
 	return $self->{abs_client};
 }
 
@@ -210,9 +215,6 @@ sub abs_client {
 returns abs_path to client dir
 
 =cut
-
-
-
 
 sub _set_client {
 	my $self = shift;	
@@ -243,6 +245,48 @@ returns client name, just the name
 
 =cut
 
+# borrowed code http://www.perlcircus.org/moremod.shtml
+sub is_empty_dir {
+	my ($shortname, $path, $fullname) = @_;
+	## $shortname
+	## $path
+	## $fullname
+    my $dh = IO::Dir->new($fullname) or return;
+    my $count = scalar(grep{!/^\.\.?$/} $dh->read());
+    $dh->close();
+    return($count==0);
+}
+
+
+sub _emptydirfinder {
+	my $self = shift; 
+	
+	
+	my $finder= File::Find::Rule->new;
+		$finder->directory();
+		$finder->exec( \&is_empty_dir);		
+#			sub {
+#				my $dh = IO::Dir->new(+shift) or return;
+#				my $count = scalar(grep{!/^\.\.?$/} $dh->read());
+#				$dh->close();
+#				return($count==0);
+#			}	
+#		);
+		$finder->not_name( qr/incoming/i );
+
+	my $abs = $self->abs_client;
+	### $abs
+
+	my @found = $finder->in($abs);
+	### @found	
+	return \@found;
+}
+
+=head2 _emptydirfinder()
+
+no args, finds empty dirs in client
+
+=cut
 
 sub _remove_empty_dirs {
 	my $self = shift;
@@ -253,10 +297,14 @@ sub _remove_empty_dirs {
 
 	my $found_empty_dir=1; #startflag
 	
+
+
+	
 	while ($found_empty_dir){
 		 $found_empty_dir=0;
+
 	
-		my @ed = split( /\n/, `find "$abs_client" -type d -empty`);
+		my @ed = @{$self->_emptydirfinder};
 
 		if (scalar @ed){
 			for (@ed){
@@ -286,29 +334,28 @@ sub _load_types {
 	return 1;
 }
 
-
-
-
 sub sort {
 	my $self = shift;
 	my $sorted=0;
-	print STDERR " sort called for ".$self->abs_client."\n" if DEBUG;
+	print STDERR __PACKAGE__."::sort() called for client ".$self->abs_client."\n" if DEBUG;
 	for ( @{$self->ls_incoming}){
 		my $filename = $_;
-		my $file = new Dyer::Autosort::File({
-			abs_client => $self->abs_client,
-			rel_path => $self->rel_incoming."/$filename",		
-			abs_types_conf => $self->{abs_types_conf},
-		});
+
+		
+		$ENV{DOCUMENT_ROOT} = $self->abs_client;
+		my $abs_file = $self->abs_client .'/'.$self->rel_incoming."/$filename";
+		print STDERR __PACKAGE__."::sort() setting $abs_file\n" if DEBUG;
+		my $file = new Dyer::Autosort::File( $abs_file );
+		
 		if ($file->sort) {
 			$sorted++; 
 		}
 		else {
-		 print STDERR " not sorted [$filename]\n" if DEBUG;
+		 print STDERR __PACKAGE__."::sort() not sorted [$filename]\n" if DEBUG;
 		}
 	}
 
-	print STDERR "sorted $sorted, done.\n" if DEBUG;
+	print STDERR __PACKAGE__."::sort() sorted $sorted, done.\n" if DEBUG;
 	
 	return $sorted;
 } 
@@ -323,24 +370,48 @@ returns count of files succesfully sorted
 
 =cut
 
+sub _sortablefiles {
+	my ($self,$abs_in) = @_; $abs_in or croak('missing abs arg');
+
+	unless( defined $self->{_sortablefiles} ){
+		my $finder = new File::Find::Rule();
+		$finder->file;
+		$finder->name( qr/[^\/]+\@[A-Z]+\.\w{2,5}/i );
+		$self->{_sortablefiles} = $finder;
+	}	
+	
+	my @files = grep { !/\/incoming\//i } $self->{_sortablefiles}->in($abs_in);	
+	return \@files;
+}
+
+=head2 _sortablefiles()
+
+arg is abs path, matches files with @ sign
+TODO: should match types in autosort.conf
+
+=cut
+
 sub unsort {
 	my $self = shift;
 	my $abs_client = $self->abs_client;
-	print STDERR "unsort called.. " if DEBUG;
+	print STDERR __PACKAGE__."::unsort() called.. " if DEBUG;
 
-	my @files = split (/\n/,`find "$abs_client/" -type f -name "*\@*"`);
+	my @files = @{$self->_sortablefiles($abs_client)};
 	my $rel_incoming = $self->rel_incoming;
 	for (@files){
 		my $from = $_;
-		if ($from=~/^$abs_client\/+$rel_incoming/){ next;}
 		my $tofn = $from;
 		$tofn=~s/^.+\///;
-		`mv "$from" "$abs_client/$rel_incoming/$tofn";`;		
+		my $to = "$abs_client/$rel_incoming/$tofn";
+		
+		if (-e $to){ warn("Cannot unsort [$from], this file already exists in [$to]"); next; }
+		
+		File::Copy::mv($from, $to) or warn("could not File::Copy::mv() [$from] to [$to], $!");		
 	}
 	
 	$self->_remove_empty_dirs;
 
-	print STDERR "unsort done.\n" if DEBUG;
+	print STDERR __PACKAGE__."::unsort() done.\n" if DEBUG;
 	return 1;
 }
 
@@ -351,20 +422,17 @@ will remove all empty directories
 
 	$a->unsort;
 
-=cut
-
 =head1 autosort.conf
 
 by default the conf file is /etc/autosort.conf
 
-a sample file is included.
+a sample file is included. This is a L<YAML> file.
 
 
 =head1 CAVEATS
 
 this is made to run as root pretty much, but it doesnt have to. you will have to tell the autosort script
-and instances of this module that the conf file is elsewhere.
-
+and instances of this module that the conf file is elsewhere, see L<new()>.
 
 Please note, this software- altough in use, is still under development and needs more documentation.
 
@@ -372,7 +440,7 @@ At this point, if you can make use of this system, I suggest you shoot an email 
 
 =head1 DEBUGGING
 
-	Dyer::Autosort::DEBUG = 1;
+	$Dyer::Autosort::DEBUG = 1;
 
 Will set debug flags for both Dyer::Autosort and Dyer::Autosort::File
 
